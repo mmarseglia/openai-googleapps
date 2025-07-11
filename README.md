@@ -1,7 +1,7 @@
 # openai-googleapps
 
 This repository contains an example Google Apps Script for integrating the OpenAI API with Google Docs.
-The script now converts your document to **Markdown** before sending it to OpenAI and applies the returned Markdown back into the document. This helps preserve basic formatting such as headings, bold and italic text.
+The script now converts your document to **Markdown** before sending it to OpenAI and applies the returned Markdown back into the document. This helps preserve basic formatting such as headings, bold and italic text. Embedded images and drawings are inserted back into their original positions.
 
 ## Files
 
