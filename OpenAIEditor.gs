@@ -17,16 +17,16 @@ function processPrompt(instructions) {
   const doc = DocumentApp.getActiveDocument();
   const body = doc.getBody();
 
-  // Convert the existing Google Doc to Markdown so formatting is preserved
-  const originalMarkdown = docToMarkdown(body);
+  // Convert the existing Google Doc to Markdown and capture images/drawings
+  const { markdown: originalMarkdown, images } = docToMarkdown(body);
 
   const prompt =
     `Apply the following instructions to the Markdown text and return updated Markdown only.` +
     `\n\nInstructions:\n${instructions}\n\nDocument Markdown:\n${originalMarkdown}`;
   const newMarkdown = callChatGPT(prompt);
 
-  // Apply the returned Markdown back into the document
-  applyMarkdown(body, newMarkdown);
+  // Apply the returned Markdown back into the document, preserving images
+  applyMarkdown(body, newMarkdown, images);
   logChange(originalMarkdown, newMarkdown);
 }
 
@@ -67,10 +67,32 @@ function logChange(oldText, newText) {
   props.setProperty('change_logs', existing + entry + '\n');
 }
 
-// Convert the document body to Markdown, capturing basic formatting
+// Convert the document body to Markdown and capture images/drawings
 function docToMarkdown(body) {
-  const paragraphs = body.getParagraphs();
-  return paragraphs.map(paragraphToMarkdown).join('\n\n');
+  const lines = [];
+  const images = [];
+  for (let i = 0; i < body.getNumChildren(); i++) {
+    const elem = body.getChild(i);
+    const type = elem.getType();
+    if (type === DocumentApp.ElementType.PARAGRAPH) {
+      const p = elem.asParagraph();
+      if (p.getNumChildren() === 1 &&
+          (p.getChild(0).getType() === DocumentApp.ElementType.INLINE_IMAGE ||
+           p.getChild(0).getType() === DocumentApp.ElementType.INLINE_DRAWING)) {
+        const placeholder = `[[IMAGE_${images.length}]]`;
+        images.push(p.getChild(0).getBlob());
+        lines.push(placeholder);
+      } else {
+        lines.push(paragraphToMarkdown(p));
+      }
+    } else if (type === DocumentApp.ElementType.INLINE_IMAGE ||
+               type === DocumentApp.ElementType.INLINE_DRAWING) {
+      const placeholder = `[[IMAGE_${images.length}]]`;
+      images.push(elem.getBlob());
+      lines.push(placeholder);
+    }
+  }
+  return { markdown: lines.join('\n\n'), images };
 }
 
 function paragraphToMarkdown(p) {
@@ -111,11 +133,15 @@ function textElementToMarkdown(te) {
 }
 
 // Apply Markdown text back into the document body
-function applyMarkdown(body, markdown) {
+function applyMarkdown(body, markdown, images) {
   body.clear();
   const lines = markdown.split(/\r?\n/);
   lines.forEach(line => {
-    if (line.startsWith('# ')) {
+    const imgMatch = line.trim().match(/^\[\[IMAGE_(\d+)\]\]$/);
+    if (imgMatch) {
+      const idx = Number(imgMatch[1]);
+      if (images[idx]) body.appendImage(images[idx]);
+    } else if (line.startsWith('# ')) {
       body.appendParagraph(line.substring(2)).setHeading(DocumentApp.ParagraphHeading.HEADING1);
     } else if (line.startsWith('## ')) {
       body.appendParagraph(line.substring(3)).setHeading(DocumentApp.ParagraphHeading.HEADING2);
