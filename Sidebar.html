@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+  </head>
+  <body>
+    <textarea id="instructions" style="width:100%;height:150px" placeholder="Describe how to update the document"></textarea>
+    <br>
+    <button onclick="send()">Send</button>
+    <script>
+      function send() {
+        var value = document.getElementById('instructions').value;
+        google.script.run.processPrompt(value);
+      }
+    </script>
+  </body>
+</html>
