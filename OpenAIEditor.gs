@@ -29,7 +29,7 @@ function callChatGPT(prompt) {
   const url = 'https://api.openai.com/v1/chat/completions';
 
   const payload = {
-    model: 'gpt-4',
+    model: 'gpt-4.1',
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.7
   };
