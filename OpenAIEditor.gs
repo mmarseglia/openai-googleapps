@@ -80,7 +80,12 @@ function docToMarkdown(body) {
           (p.getChild(0).getType() === DocumentApp.ElementType.INLINE_IMAGE ||
            p.getChild(0).getType() === DocumentApp.ElementType.INLINE_DRAWING)) {
         const placeholder = `[[IMAGE_${images.length}]]`;
-        images.push(p.getChild(0).getBlob());
+        const child = p.getChild(0);
+        if (typeof child.getBlob === 'function') {
+          images.push(child.getBlob());
+        } else {
+          images.push(null);
+        }
         lines.push(placeholder);
       } else {
         lines.push(paragraphToMarkdown(p));
@@ -88,7 +93,11 @@ function docToMarkdown(body) {
     } else if (type === DocumentApp.ElementType.INLINE_IMAGE ||
                type === DocumentApp.ElementType.INLINE_DRAWING) {
       const placeholder = `[[IMAGE_${images.length}]]`;
-      images.push(elem.getBlob());
+      if (typeof elem.getBlob === 'function') {
+        images.push(elem.getBlob());
+      } else {
+        images.push(null);
+      }
       lines.push(placeholder);
     }
   }
