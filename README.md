@@ -1,7 +1,7 @@
 # openai-googleapps
 
 This repository contains an example Google Apps Script for integrating the OpenAI API with Google Docs.
-The script no longer exports your document to Markdown. Instead it reads the document structure directly using `DocumentApp` and sends the plain text to OpenAI. When the response is received, the script updates the document using `Text.setText()` and `Text.setTextStyle()` so the original formatting is preserved. Embedded images and drawings are inserted back into their original positions.
+The script no longer exports your document to Markdown. Instead it reads the document structure directly using `DocumentApp` and sends the plain text to OpenAI. When the response is received, the script updates the document using `Text.setText()` and either `Text.setTextStyle()` or `Text.setAttributes()` so the original formatting is preserved. Embedded images and drawings are inserted back into their original positions.
 
 ## Files
 
