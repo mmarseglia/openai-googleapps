@@ -17,17 +17,17 @@ function processPrompt(instructions) {
   const doc = DocumentApp.getActiveDocument();
   const body = doc.getBody();
 
-  // Convert the existing Google Doc to Markdown and capture images/drawings
-  const { markdown: originalMarkdown, images } = docToMarkdown(body);
+  // Read the current document text and styles
+  const { text: originalText, images, styles } = docToText(body);
 
   const prompt =
-    `Apply the following instructions to the Markdown text and return updated Markdown only.` +
-    `\n\nInstructions:\n${instructions}\n\nDocument Markdown:\n${originalMarkdown}`;
-  const newMarkdown = callChatGPT(prompt);
+    `Apply the following instructions to the text and return updated text only.` +
+    `\n\nInstructions:\n${instructions}\n\nDocument Text:\n${originalText}`;
+  const newText = callChatGPT(prompt);
 
-  // Apply the returned Markdown back into the document, preserving images
-  applyMarkdown(body, newMarkdown, images);
-  logChange(originalMarkdown, newMarkdown);
+  // Apply the returned text back into the document, preserving style and images
+  applyText(body, newText, images, styles);
+  logChange(originalText, newText);
 }
 
 function callChatGPT(prompt) {
@@ -67,132 +67,64 @@ function logChange(oldText, newText) {
   props.setProperty('change_logs', existing + entry + '\n');
 }
 
-// Convert the document body to Markdown and capture images/drawings
-function docToMarkdown(body) {
+// Read the document body text and capture images and basic styles
+function docToText(body) {
   const lines = [];
   const images = [];
+  const styles = [];
   for (let i = 0; i < body.getNumChildren(); i++) {
     const elem = body.getChild(i);
     const type = elem.getType();
     if (type === DocumentApp.ElementType.PARAGRAPH) {
       const p = elem.asParagraph();
-      if (p.getNumChildren() === 1 &&
-          (p.getChild(0).getType() === DocumentApp.ElementType.INLINE_IMAGE ||
-           p.getChild(0).getType() === DocumentApp.ElementType.INLINE_DRAWING)) {
+      if (
+        p.getNumChildren() === 1 &&
+        (p.getChild(0).getType() === DocumentApp.ElementType.INLINE_IMAGE ||
+          p.getChild(0).getType() === DocumentApp.ElementType.INLINE_DRAWING)
+      ) {
         const placeholder = `[[IMAGE_${images.length}]]`;
         images.push(p.getChild(0).getBlob());
         lines.push(placeholder);
+        styles.push(null);
       } else {
-        lines.push(paragraphToMarkdown(p));
+        const te = p.editAsText();
+        const text = te.getText();
+        const style = text.length > 0 ? te.getTextStyle(0, text.length - 1) : null;
+        lines.push(text);
+        styles.push({ textStyle: style, heading: p.getHeading() });
       }
-    } else if (type === DocumentApp.ElementType.INLINE_IMAGE ||
-               type === DocumentApp.ElementType.INLINE_DRAWING) {
+    } else if (
+      type === DocumentApp.ElementType.INLINE_IMAGE ||
+      type === DocumentApp.ElementType.INLINE_DRAWING
+    ) {
       const placeholder = `[[IMAGE_${images.length}]]`;
       images.push(elem.getBlob());
       lines.push(placeholder);
+      styles.push(null);
     }
   }
-  return { markdown: lines.join('\n\n'), images };
+  return { text: lines.join('\n'), images, styles };
 }
 
-function paragraphToMarkdown(p) {
-  let text = textElementToMarkdown(p.editAsText());
-  switch (p.getHeading()) {
-    case DocumentApp.ParagraphHeading.HEADING1:
-      return '# ' + text;
-    case DocumentApp.ParagraphHeading.HEADING2:
-      return '## ' + text;
-    case DocumentApp.ParagraphHeading.HEADING3:
-      return '### ' + text;
-    default:
-      return text;
-  }
-}
-
-function textElementToMarkdown(te) {
-  const txt = te.getText();
-  let md = '';
-  let prevBold = false;
-  let prevItalic = false;
-  for (let i = 0; i < txt.length; i++) {
-    const curBold = te.isBold(i);
-    const curItalic = te.isItalic(i);
-    if (curBold !== prevBold) {
-      md += '**';
-      prevBold = curBold;
-    }
-    if (curItalic !== prevItalic) {
-      md += '_';
-      prevItalic = curItalic;
-    }
-    md += txt[i];
-  }
-  if (prevBold) md += '**';
-  if (prevItalic) md += '_';
-  return md;
-}
-
-// Apply Markdown text back into the document body
-function applyMarkdown(body, markdown, images) {
+// Apply plain text back into the document body preserving style information
+function applyText(body, text, images, styles) {
   body.clear();
-  const lines = markdown.split(/\r?\n/);
-  lines.forEach(line => {
+  const lines = text.split(/\r?\n/);
+  let styleIndex = 0;
+  lines.forEach((line) => {
     const imgMatch = line.trim().match(/^\[\[IMAGE_(\d+)\]\]$/);
     if (imgMatch) {
       const idx = Number(imgMatch[1]);
       if (images[idx]) body.appendImage(images[idx]);
-    } else if (line.startsWith('# ')) {
-      body.appendParagraph(line.substring(2)).setHeading(DocumentApp.ParagraphHeading.HEADING1);
-    } else if (line.startsWith('## ')) {
-      body.appendParagraph(line.substring(3)).setHeading(DocumentApp.ParagraphHeading.HEADING2);
-    } else if (line.startsWith('### ')) {
-      body.appendParagraph(line.substring(4)).setHeading(DocumentApp.ParagraphHeading.HEADING3);
-    } else if (line.trim() === '') {
-      body.appendParagraph('');
     } else {
-      appendInlineMarkdown(body.appendParagraph(''), line);
+      const style = styles[styleIndex++] || {};
+      const p = body.appendParagraph('');
+      if (style.heading) p.setHeading(style.heading);
+      const te = p.editAsText();
+      te.setText(line);
+      if (style.textStyle && line.length > 0) {
+        te.setTextStyle(0, line.length - 1, style.textStyle);
+      }
     }
   });
-}
-
-function appendInlineMarkdown(paragraph, text) {
-  const te = paragraph.editAsText();
-  const tokens = parseInlineMarkdown(text);
-  tokens.forEach(token => {
-    const start = te.getText().length;
-    te.insertText(start, token.text);
-    const end = te.getText().length - 1;
-    if (token.bold) te.setBold(start, end, true);
-    if (token.italic) te.setItalic(start, end, true);
-  });
-}
-
-function parseInlineMarkdown(text) {
-  const tokens = [];
-  let i = 0;
-  let bold = false;
-  let italic = false;
-  let chunk = '';
-  while (i < text.length) {
-    if (text.startsWith('**', i)) {
-      if (chunk) {
-        tokens.push({ text: chunk, bold, italic });
-        chunk = '';
-      }
-      bold = !bold;
-      i += 2;
-    } else if (text[i] === '_') {
-      if (chunk) {
-        tokens.push({ text: chunk, bold, italic });
-        chunk = '';
-      }
-      italic = !italic;
-      i += 1;
-    } else {
-      chunk += text[i];
-      i += 1;
-    }
-  }
-  if (chunk) tokens.push({ text: chunk, bold, italic });
-  return tokens;
 }
