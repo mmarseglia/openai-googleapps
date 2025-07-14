@@ -89,9 +89,16 @@ function docToText(body) {
       } else {
         const te = p.editAsText();
         const text = te.getText();
-        const style = text.length > 0 ? te.getTextStyle(0, text.length - 1) : null;
+        let style = null;
+        if (text.length > 0) {
+          if (typeof te.getTextStyle === 'function') {
+            style = te.getTextStyle(0, text.length - 1);
+          } else {
+            style = te.getAttributes(0);
+          }
+        }
         lines.push(text);
-        styles.push({ textStyle: style, heading: p.getHeading() });
+        styles.push({ style: style, heading: p.getHeading() });
       }
     } else if (
       type === DocumentApp.ElementType.INLINE_IMAGE ||
@@ -117,14 +124,18 @@ function applyText(body, text, images, styles) {
       const idx = Number(imgMatch[1]);
       if (images[idx]) body.appendImage(images[idx]);
     } else {
-      const style = styles[styleIndex++] || {};
-      const p = body.appendParagraph('');
-      if (style.heading) p.setHeading(style.heading);
-      const te = p.editAsText();
-      te.setText(line);
-      if (style.textStyle && line.length > 0) {
-        te.setTextStyle(0, line.length - 1, style.textStyle);
+        const style = styles[styleIndex++] || {};
+        const p = body.appendParagraph('');
+        if (style.heading) p.setHeading(style.heading);
+        const te = p.editAsText();
+        te.setText(line);
+        if (style.style && line.length > 0) {
+          if (typeof te.setTextStyle === 'function' && typeof style.style.copy === 'function') {
+            te.setTextStyle(0, line.length - 1, style.style);
+          } else if (typeof te.setAttributes === 'function') {
+            te.setAttributes(style.style);
+          }
+        }
       }
-    }
-  });
-}
+    });
+  }
