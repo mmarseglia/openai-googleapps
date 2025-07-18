@@ -1,4 +1,12 @@
-const OPENAI_API_KEY = 'YOUR_API_KEY_HERE';
+/**
+ * Retrieve the OpenAI API key from script properties. This prevents the key
+ * from being stored directly in the source code where it could be exposed.
+ */
+function getApiKey() {
+  const key = PropertiesService.getScriptProperties().getProperty('OPENAI_API_KEY');
+  if (!key) throw new Error('OPENAI_API_KEY is not configured');
+  return key;
+}
 
 function onOpen() {
   DocumentApp.getUi()
@@ -43,7 +51,7 @@ function callChatGPT(prompt) {
     method: 'post',
     contentType: 'application/json',
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`
+      Authorization: `Bearer ${getApiKey()}`
     },
     payload: JSON.stringify(payload)
   };
